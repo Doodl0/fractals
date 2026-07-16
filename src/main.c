@@ -3,6 +3,7 @@
 #include "SDL3/SDL_render.h"
 #include "SDL3/SDL_scancode.h"
 #include "SDL3/SDL_surface.h"
+#include <stddef.h>
 #define SDL_MAIN_USE_CALLBACKS 1  /* use the callbacks instead of main() */
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
@@ -25,6 +26,35 @@ float input_zoom(const SDL_Event *event, float zoom) {
         zoom += 0.1f;
     }
     return zoom;
+}
+
+// Mandelbrot function shamelessly copied from wikipedia
+SDL_Color mandelbrot(int Px, int Py) {
+    // Scaled x coordinate of pixel (scaled to lie in the Mandelbrot X scale (-2.00, 0.47))
+    float x0 = ((float)Px / (float)X_RESOLUTION) * 2.47f - 2.0f;
+    // Scaled y coordinare of pixel (scaled to lie in the Mandelbrot Y scale (-1.12, 1.12))
+    float y0 = ((float)Py / (float)Y_RESOLUTION) * 2.24f - 1.0f;
+
+    float x = 0;
+    float y = 0;
+    int iteration = 0;
+    int max_iteration = 1000;
+
+    float x2 = 0;
+    float y2 = 0;
+    float w = 0;
+
+    while (x2 + y2 <= 4 && iteration < max_iteration) {
+        x = x2 - y2 + x0;
+        y = w - x2 - y2 + y0;
+        x2 = x * x;
+        y2 = y * y;
+        w = (x + y) * (x + y);
+        iteration += 1;
+    }
+
+    SDL_Color colour = {iteration, iteration, iteration, 255};
+    return colour;
 }
 
 /* This function runs once at startup. */
@@ -56,7 +86,8 @@ SDL_AppResult SDL_AppIterate(void *appstate)
     SDL_LockSurface(surface);
     for (int x = 0; x < X_RESOLUTION; x++) {
         for (int y = 0; y < Y_RESOLUTION; y++) {
-            SDL_WriteSurfacePixel(surface, x, y, (x), (y), 255, 255);
+            SDL_Color colour = mandelbrot(x, y);
+            SDL_WriteSurfacePixel(surface, x, y, colour.r, colour.g, colour.b, 255);
         }
     }
 
