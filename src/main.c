@@ -1,17 +1,15 @@
 #include "SDL3/SDL_events.h"
-#include "SDL3/SDL_oldnames.h"
+#include "SDL3/SDL_init.h"
 #include "SDL3/SDL_pixels.h"
 #include "SDL3/SDL_render.h"
 #include "SDL3/SDL_scancode.h"
 #include "SDL3/SDL_surface.h"
-#include "SDL3/SDL_thread.h"
-#include "SDL3/SDL_timer.h"
 #include <stddef.h>
-#include <xkbcommon/xkbcommon.h>
 #define SDL_MAIN_USE_CALLBACKS 1  /* use the callbacks instead of main() */
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 #include <stdio.h>
+#include <math.h>
 
 // Constant resolution for now
 #define X_RESOLUTION 800
@@ -22,6 +20,14 @@ static SDL_Window *window = NULL;
 static SDL_Renderer *renderer = NULL;
 static SDL_Surface *surface = NULL;
 
+typedef enum DisplayScreen {
+    MENU,
+    MANDELBROT_SET,
+    SIERPINSKI_TRIANGLE,
+    KOCH_SNOWFLAKE,
+} DisplayScreen;
+
+DisplayScreen current_screen = 0;
 
 // Hopefully allows the fractals to be dynamically zoomed into and out of, and shifted left right up and down
 // Last positions and zooms are to be used for stopping rendering when nothing changes between frames
@@ -31,20 +37,47 @@ int x_offset = 400;
 int y_offset = 300;
 int x_last_offset, y_last_offset = 0;
 
-typedef struct {
-    int x;
-    int y;
-} Pixel;
+// Draw a simple selection menu with debug text to allow the user to select a fractal
+void DrawMenu() {
 
-// hardcoded max data because i'm stupid
-typedef struct {
-    int width;
-    int height;
-    int start_x;
-    int start_y;
-    SDL_Color pixel_data[X_RESOLUTION][Y_RESOLUTION];
-} ChunkData;
+    // Set draw colour to white
+    SDL_SetRenderDrawColor(renderer, 255,255,255,255);
+    // Increase scale for title (Debug text is only at 16x16)
+    SDL_SetRenderScale(renderer, 5, 5);
+    SDL_RenderDebugText(renderer, 10, 10, "Fractals Menu");
 
+    // Decrease render scale for options
+    SDL_SetRenderScale(renderer, 3, 3);
+
+    // Split line as too long
+    SDL_RenderDebugText(renderer, 16, 40, "Press keys 1, 2, 3 or 4");
+    SDL_RenderDebugText(renderer, 16, 50, "to select an option");
+
+    // List options
+    SDL_RenderDebugText(renderer, 16, 70, "1. Mandelbrot Set");
+    SDL_RenderDebugText(renderer, 16, 90, "2. Sierpinski Triangle");
+    SDL_RenderDebugText(renderer, 16, 110, "3. Koch Snowflake");
+    SDL_RenderDebugText(renderer, 16, 130, "4. Quit");
+
+    // Render
+    SDL_RenderPresent(renderer);
+}
+
+SDL_AppResult MenuInput(SDL_Event *event) {
+    if (event->key.scancode == SDL_SCANCODE_1) {
+        current_screen = MANDELBROT_SET;
+    }
+    else if (event->key.scancode == SDL_SCANCODE_2) {
+        current_screen = SIERPINSKI_TRIANGLE;
+    }
+    else if (event->key.scancode == SDL_SCANCODE_3) {
+        current_screen = KOCH_SNOWFLAKE;
+    }
+    else if (event->key.scancode == SDL_SCANCODE_4) {
+        return SDL_APP_SUCCESS;
+    }
+    return SDL_APP_CONTINUE;
+}
 
 // Mandelbrot function shamelessly copied from wikipedia
 int Mandelbrot(int Px, int Py) {
@@ -66,65 +99,16 @@ int Mandelbrot(int Px, int Py) {
     return iteration;
 }
 
-/* This function runs once at startup. */
-SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
-{
-    /* Create the window */
-    if (!SDL_CreateWindowAndRenderer("Fractals", X_RESOLUTION, Y_RESOLUTION, 0, &window, &renderer)) {
-        SDL_Log("Couldn't create window and renderer: %s", SDL_GetError());
-        return SDL_APP_FAILURE;
-    }
-
-    // Create surface
-    surface = SDL_CreateSurface(X_RESOLUTION, Y_RESOLUTION, SDL_PIXELFORMAT_RGBA8888);
-
-    return SDL_APP_CONTINUE;
-}
-
-/* This function runs when a new event (mouse input, keypresses, etc) occurs. */
-SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event)
-{
-    // Only keydown otherwise double input from keyup
-    if (event->type == SDL_EVENT_KEY_DOWN) {
-        if (event->key.scancode == SDL_SCANCODE_EQUALS || event->key.scancode == SDL_SCANCODE_KP_PLUS) {
-            zoom -= 0.01f;
-        }
-        else if (event->key.scancode == SDL_SCANCODE_MINUS || event->key.scancode == SDL_SCANCODE_KP_MINUS) {
-            zoom += 0.01f;
-        }
-        else if (event->key.scancode == SDL_SCANCODE_UP) {
-            y_offset -= 25;
-        }
-        else if (event->key.scancode == SDL_SCANCODE_DOWN) {
-            y_offset += 25;
-        }
-        else if (event->key.scancode == SDL_SCANCODE_LEFT) {
-            x_offset -= 25;
-        }
-        else if (event->key.scancode == SDL_SCANCODE_RIGHT) {
-            x_offset += 25;
-        }
-    }
-    if (event->type == SDL_EVENT_QUIT) {
-        return SDL_APP_SUCCESS;  /* end the program, reporting success to the OS. */
-    }
-    return SDL_APP_CONTINUE;
-}
-
-/* This function runs once per frame, and is the heart of the program. */
-SDL_AppResult SDL_AppIterate(void *appstate)
-{
-
+void DrawMandelbrot() {
     // Only render new frame if zoom or offset changes - saves a lot of performance because my code is slow
     if (zoom != last_zoom || x_offset != x_last_offset || y_offset != y_last_offset) {
 
         last_zoom = zoom;
         x_last_offset = x_offset;
         y_last_offset = y_offset;
-        int iteration_counts[X_RESOLUTION][Y_RESOLUTION] = {};
-        int num_iteration_per_pixel[255] = {};
 
         SDL_LockSurface(surface);
+        // Loop over every pixel like a fragment shader
         for (int x = 0; x < X_RESOLUTION; x++) {
             for (int y = 0; y < Y_RESOLUTION; y++) {
                 int iteration = Mandelbrot(x, y);
@@ -132,6 +116,7 @@ SDL_AppResult SDL_AppIterate(void *appstate)
                     SDL_WriteSurfacePixel(surface, x, y, 0, 0, 0, 255);
                 }
                 else {
+                    // Assign colours
                     float t = (float)iteration / MAX_ITERATIONS;
                     Uint8 r = (Uint8)(9 * (1 - t) * t * t * t * 255);
                     Uint8 g = (Uint8)(15 * (1 - t) * (1 - t) * t * t * 255);
@@ -155,6 +140,80 @@ SDL_AppResult SDL_AppIterate(void *appstate)
         SDL_RenderPresent(renderer);
 
         SDL_DestroyTexture(texture);
+    }
+
+}
+
+void MandelbrotInput(SDL_Event *event) {
+    if (event->key.scancode == SDL_SCANCODE_EQUALS || event->key.scancode == SDL_SCANCODE_KP_PLUS) {
+        zoom -= 0.05f;
+    }
+    else if (event->key.scancode == SDL_SCANCODE_MINUS || event->key.scancode == SDL_SCANCODE_KP_MINUS) {
+        zoom += 0.05f;
+    }
+    else if (event->key.scancode == SDL_SCANCODE_UP) {
+        y_offset -= 25;
+    }
+    else if (event->key.scancode == SDL_SCANCODE_DOWN) {
+        y_offset += 25;
+    }
+    else if (event->key.scancode == SDL_SCANCODE_LEFT) {
+        x_offset -= 25;
+    }
+    else if (event->key.scancode == SDL_SCANCODE_RIGHT) {
+        x_offset += 25;
+    }
+}
+
+void DrawSierpinksi() {
+
+}
+
+/* This function runs once at startup. */
+SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
+{
+    //current_screen = MENU;
+    /* Create the window */
+    if (!SDL_CreateWindowAndRenderer("Fractals", X_RESOLUTION, Y_RESOLUTION, 0, &window, &renderer)) {
+        SDL_Log("Couldn't create window and renderer: %s", SDL_GetError());
+        return SDL_APP_FAILURE;
+    }
+
+    // Create surface
+    surface = SDL_CreateSurface(X_RESOLUTION, Y_RESOLUTION, SDL_PIXELFORMAT_RGBA8888);
+
+    return SDL_APP_CONTINUE;
+}
+
+/* This function runs when a new event (mouse input, keypresses, etc) occurs. */
+SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event)
+{
+    if (event->type == SDL_EVENT_QUIT) {
+        return SDL_APP_SUCCESS;  /* end the program, reporting success to the OS. */
+    }
+    // Only keydown otherwise double input from keyup
+    if (event->type == SDL_EVENT_KEY_DOWN) {
+        // If in the menu, listen for number keys to change the screen or quit
+        if (current_screen == MENU) {
+            return MenuInput(event);
+        }
+        else {
+            MandelbrotInput(event);
+        }
+    }
+
+    return SDL_APP_CONTINUE;
+}
+
+/* This function runs once per frame, and is the heart of the program. */
+SDL_AppResult SDL_AppIterate(void *appstate)
+{
+    // Switch through to get current screen and draw
+    switch (current_screen) {
+        case MENU: DrawMenu(); break;
+        case MANDELBROT_SET: DrawMandelbrot(); break;
+        case SIERPINSKI_TRIANGLE: {}; break;
+        case KOCH_SNOWFLAKE: {}; break;
     }
 
     return SDL_APP_CONTINUE;
