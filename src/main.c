@@ -1,5 +1,6 @@
 #include "SDL3/SDL_events.h"
 #include "SDL3/SDL_init.h"
+#include "SDL3/SDL_log.h"
 #include "SDL3/SDL_pixels.h"
 #include "SDL3/SDL_rect.h"
 #include "SDL3/SDL_render.h"
@@ -297,7 +298,7 @@ void DrawMandelbrotThreaded() {
         for (int i = 0; i < THREADS; i++) {
             int return_value;
             SDL_WaitThread(threads[i], &return_value);
-            SDL_Log("Thread returned value: %d", return_value);
+            //SDL_Log("Thread returned value: %d", return_value);
         }
 
         // Set last zoom and offset to current so that the program knows nothing has changed between this frame and the next
@@ -327,6 +328,9 @@ void MandelbrotInput(SDL_Event *event) {
     // Zoom in
     if (event->key.scancode == SDL_SCANCODE_EQUALS || event->key.scancode == SDL_SCANCODE_KP_PLUS) {
         zoom -= 0.01f;
+        if (zoom <= 0) {
+            zoom = 0.01f;
+        }
     }
     // Zoom out
     else if (event->key.scancode == SDL_SCANCODE_MINUS || event->key.scancode == SDL_SCANCODE_KP_MINUS) {
@@ -334,19 +338,27 @@ void MandelbrotInput(SDL_Event *event) {
     }
     // Shift up
     else if (event->key.scancode == SDL_SCANCODE_UP) {
-        y_offset -= 10;
+        int y = 10 * zoom;
+        if (y <= 0) {y = 1;}
+        y_offset -= y;
     }
     // Shift down
     else if (event->key.scancode == SDL_SCANCODE_DOWN) {
-        y_offset += 10;
+        int y = 10 * zoom;
+        if (y <= 0) {y = 1;}
+        y_offset += y;
     }
     // Shift left
     else if (event->key.scancode == SDL_SCANCODE_LEFT) {
-        x_offset -= 10;
+        int x = 10 * zoom;
+        if (x <= 0) {x = 1;}
+        x_offset -= x;
     }
     // Shift right
     else if (event->key.scancode == SDL_SCANCODE_RIGHT) {
-        x_offset += 10;
+        int x = 10 * zoom;
+        if (x <= 0) {x = 1;}
+        x_offset += x;
     }
 }
 
@@ -393,22 +405,33 @@ void SierpinskiInput(SDL_Event *event) {
     // Zoom out
     else if (event->key.scancode == SDL_SCANCODE_MINUS || event->key.scancode == SDL_SCANCODE_KP_MINUS) {
         zoom -= 0.01f;
+        if (zoom <= 0) {
+            zoom = 0.01f;
+        }
     }
     // Shift up
     else if (event->key.scancode == SDL_SCANCODE_UP) {
-        y_offset += 10;
+        int y = 10 * zoom;
+        if (y <= 0) {y = 1;}
+        y_offset += y;
     }
     // Shift down
     else if (event->key.scancode == SDL_SCANCODE_DOWN) {
-        y_offset -= 10;
+        int y = 10 * zoom;
+        if (y <= 0) {y = 1;}
+        y_offset -= y;
     }
     // Shift left
     else if (event->key.scancode == SDL_SCANCODE_LEFT) {
-        x_offset += 10;
+        int x = 10 * zoom;
+        if (x <= 0) {x = 1;}
+        x_offset += x;
     }
     // Shift right
     else if (event->key.scancode == SDL_SCANCODE_RIGHT) {
-        x_offset -= 10;
+        int x = 10 * zoom;
+        if (x <= 0) {x = 1;}
+        x_offset -= x;
     }
 }
 
@@ -446,9 +469,9 @@ void DrawKochSnowflake() {
     SDL_SetRenderScale(renderer, 1, 1);
     SDL_SetRenderDrawColor(renderer, 255,255,255,255);
     // Initial vertices for a large centered triangle
-    Point p1 = {(400 - (X_RESOLUTION / 2)) * zoom + x_offset, (50 - (Y_RESOLUTION / 2)) * zoom + y_offset};
-    Point p2 = {(150 - (X_RESOLUTION / 2)) * zoom + x_offset, (483 - (Y_RESOLUTION / 2)) * zoom + y_offset};
-    Point p3 = {(650 - (X_RESOLUTION / 2)) * zoom + x_offset, (483 - (Y_RESOLUTION / 2)) * zoom + y_offset};
+    Point p1 = {((400 - (X_RESOLUTION / 2)) + x_offset) * zoom, ((50 - (Y_RESOLUTION / 2)) + y_offset) * zoom};
+    Point p2 = {((150 - (X_RESOLUTION / 2)) + x_offset) * zoom, ((483 - (Y_RESOLUTION / 2)) + y_offset) * zoom};
+    Point p3 = {((650 - (X_RESOLUTION / 2)) + x_offset) * zoom, ((483 - (Y_RESOLUTION / 2)) + y_offset) * zoom};
 
     // Draw the 3 sides of the triangle
     DrawKochCurve(p2, p1, RENDER_DEPTH);
@@ -467,22 +490,33 @@ void KochSnowflakeInput(SDL_Event *event) {
     // Zoom out
     else if (event->key.scancode == SDL_SCANCODE_MINUS || event->key.scancode == SDL_SCANCODE_KP_MINUS) {
         zoom -= 0.01f;
+        if (zoom <= 0) {
+            zoom = 0.01f;
+        }
     }
     // Shift up
     else if (event->key.scancode == SDL_SCANCODE_UP) {
-        y_offset += 10;
+        int y = 10 * zoom;
+        if (y <= 0) {y = 1;}
+        y_offset += y;
     }
     // Shift down
     else if (event->key.scancode == SDL_SCANCODE_DOWN) {
-        y_offset -= 10;
+        int y = 10 * zoom;
+        if (y <= 0) {y = 1;}
+        y_offset -= y;
     }
     // Shift left
     else if (event->key.scancode == SDL_SCANCODE_LEFT) {
-        x_offset += 10;
+        int x = 10 * zoom;
+        if (x <= 0) {x = 1;}
+        x_offset += x;
     }
     // Shift right
     else if (event->key.scancode == SDL_SCANCODE_RIGHT) {
-        x_offset -= 10;
+        int x = 10 * zoom;
+        if (x <= 0) {x = 1;}
+        x_offset -= x;
     }
 }
 SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
