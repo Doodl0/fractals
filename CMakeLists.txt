@@ -16,3 +16,5 @@ set(SOURCE_FILES
 # Create executable target as usual
 add_executable(fractals WIN32 ${SOURCE_FILES})
 target_link_libraries(fractals PRIVATE SDL3::SDL3)
+# libm linking
+target_link_libraries(fractals PUBLIC m)
