@@ -210,7 +210,11 @@ void DrawSierpinksi() {
     //SDL_RenderLine(renderer);
 }
 
-// Draw a single Koch Curve -- CANNOT TEST RIGHT NOW BECAUSE GLIBC IS BROKEN AND I HAVE NO INTERNET
+void SierpinskiInput() {
+
+}
+
+// Draw a single Koch Curve
 void DrawKochCurve(Point p1, Point p2, int depth) {
     // If depth is 0, this is the final iteration needed, so just draw a line and return
     if (depth <= 0) {
@@ -237,7 +241,7 @@ void DrawKochCurve(Point p1, Point p2, int depth) {
     DrawKochCurve(p5, p2, depth - 1);
 }
 
-// Draw a snowflake to the screen using SDL line drawing -- WORK IN PROGRESS
+// Draw a snowflake to the screen using SDL line drawing
 void DrawKochSnowflake() {
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
@@ -256,6 +260,7 @@ void DrawKochSnowflake() {
     SDL_RenderPresent(renderer);
 }
 
+// Inputs are inversed because I can't be bothered to fix them in the snowflake code
 void KochSnowflakeInput(SDL_Event *event) {
     // Zoom in
     if (event->key.scancode == SDL_SCANCODE_EQUALS || event->key.scancode == SDL_SCANCODE_KP_PLUS) {
