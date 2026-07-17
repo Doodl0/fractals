@@ -11,6 +11,13 @@
 #include <SDL3/SDL_main.h>
 #include <stdio.h>
 
+// Windows fixes
+#ifdef _WIN32
+    #define _USE_MATH_DEFINES
+#endif
+#ifndef M_PI
+    #define M_PI 3.14159265358979323846
+#endif
 
 // Constant resolution for now
 #define X_RESOLUTION 800
@@ -19,6 +26,7 @@
 // Max iterations for Mandelbrot set - 255 is an easy number for pixel calculations
 #define MAX_ITERATIONS 255
 #define RENDER_DEPTH 7
+#define THREADS
 
 static SDL_Window *window = NULL;
 static SDL_Renderer *renderer = NULL;
@@ -103,11 +111,11 @@ int Mandelbrot(int Px, int Py) {
     float y0 = (((float)(Py - (Y_RESOLUTION / 2)) * zoom + y_offset ) / ((float)Y_RESOLUTION) * 2.24f - 1.0f) ;
 
     // Initialise x, y and iteration values as 0
-    float x, y = 0;
+    float x = 0, y = 0;
     int iteration = 0;
 
     // Optimized time escape algorithm
-    float x2, y2 = 0;
+    float x2 = 0, y2 = 0;
     while (x2 + y2 <= 4 && iteration < MAX_ITERATIONS) {
         x2 = x * x;
         y2 = y * y;
@@ -175,6 +183,19 @@ void DrawMandelbrot() {
         SDL_DestroyTexture(texture);
     }
 
+}
+
+void DrawMandelbrotThreaded() {
+    // Each thread has it's own surface to write to, which will then be used to draw the final image
+    SDL_Surface *surfaces[THREADS] = {};
+    SDL_Thread *threads[THREADS] = {};
+
+    // Thread surface resolution - each thread will render a horizontal slice, so x resolution will be the same
+    int thread_x_resolution = 0;
+
+    for (int i = 0; i < 8; i++) {
+        //surfaces[i] = SDL_CreateSurface()
+    }
 }
 
 // Handle input while Mandelbrot is the active screen
