@@ -276,6 +276,7 @@ void DrawMandelbrotThreaded() {
         int thread_y_resolution = (Y_RESOLUTION / THREADS);
 
         for (int i = 0; i < THREADS; i++) {
+            // Create surface, lock it and package it with thread data so it can be written to
             thread_surfaces[i] = SDL_CreateSurface(X_RESOLUTION, thread_y_resolution, SDL_PIXELFORMAT_RGBA8888);
             SDL_LockSurface(thread_surfaces[i]);
             thread_data[i] = (ThreadData) {
@@ -289,6 +290,7 @@ void DrawMandelbrotThreaded() {
                 thread_surfaces[i]
             };
 
+            // Create threads with thread data
             char thread_name[32] = "Thread";
             sprintf(thread_name, "Thread %i", i);
 
@@ -307,7 +309,7 @@ void DrawMandelbrotThreaded() {
         y_last_offset = y_offset;
     }
 
-    // Create texture from surface and render it
+    // Create texture from each surface and render it at the corresponding vertical offset
     for (int i = 0; i < THREADS; i++) {
         SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, thread_surfaces[i]);
         const SDL_FRect rect = (SDL_FRect) {
@@ -324,7 +326,7 @@ void DrawMandelbrotThreaded() {
 }
 
 // Handle input while Mandelbrot is the active screen
-void MandelbrotInput(SDL_Event *event) {
+void FractalInput(SDL_Event *event) {
     // Zoom in
     if (event->key.scancode == SDL_SCANCODE_EQUALS || event->key.scancode == SDL_SCANCODE_KP_PLUS) {
         zoom -= 0.01f;
@@ -387,52 +389,13 @@ void DrawSierpinksi() {
     SDL_RenderClear(renderer);
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     // Initial vertices for a large centered triangle
-    Point p1 = {(400 - (X_RESOLUTION / 2)) * zoom + x_offset, (50 - (Y_RESOLUTION / 2)) * zoom + y_offset};
-    Point p2 = {(150 - (X_RESOLUTION / 2)) * zoom + x_offset, (483 - (Y_RESOLUTION / 2)) * zoom + y_offset};
-    Point p3 = {(650 - (X_RESOLUTION / 2)) * zoom + x_offset, (483 - (Y_RESOLUTION / 2)) * zoom + y_offset};
+    Point p1 = {(400 - x_offset) / zoom + (X_RESOLUTION / 2), (50  - y_offset) / zoom + (Y_RESOLUTION / 2)};
+    Point p2 = {(150 - x_offset) / zoom + (X_RESOLUTION / 2), (483 - y_offset) / zoom + (Y_RESOLUTION / 2)};
+    Point p3 = {(650 - x_offset) / zoom + (X_RESOLUTION / 2), (483 - y_offset) / zoom + (Y_RESOLUTION / 2)};
 
     DrawIterativeTriangles(p1,p2,p3, RENDER_DEPTH);
 
     SDL_RenderPresent(renderer);
-}
-
-// Inversed again because cannot be bothered to fix triangle code
-void SierpinskiInput(SDL_Event *event) {
-    // Zoom in
-    if (event->key.scancode == SDL_SCANCODE_EQUALS || event->key.scancode == SDL_SCANCODE_KP_PLUS) {
-        zoom += 0.01f;
-    }
-    // Zoom out
-    else if (event->key.scancode == SDL_SCANCODE_MINUS || event->key.scancode == SDL_SCANCODE_KP_MINUS) {
-        zoom -= 0.01f;
-        if (zoom <= 0) {
-            zoom = 0.01f;
-        }
-    }
-    // Shift up
-    else if (event->key.scancode == SDL_SCANCODE_UP) {
-        int y = 10 * zoom;
-        if (y <= 0) {y = 1;}
-        y_offset += y;
-    }
-    // Shift down
-    else if (event->key.scancode == SDL_SCANCODE_DOWN) {
-        int y = 10 * zoom;
-        if (y <= 0) {y = 1;}
-        y_offset -= y;
-    }
-    // Shift left
-    else if (event->key.scancode == SDL_SCANCODE_LEFT) {
-        int x = 10 * zoom;
-        if (x <= 0) {x = 1;}
-        x_offset += x;
-    }
-    // Shift right
-    else if (event->key.scancode == SDL_SCANCODE_RIGHT) {
-        int x = 10 * zoom;
-        if (x <= 0) {x = 1;}
-        x_offset -= x;
-    }
 }
 
 // Draw a single Koch Curve
@@ -469,9 +432,9 @@ void DrawKochSnowflake() {
     SDL_SetRenderScale(renderer, 1, 1);
     SDL_SetRenderDrawColor(renderer, 255,255,255,255);
     // Initial vertices for a large centered triangle
-    Point p1 = {((400 - (X_RESOLUTION / 2)) + x_offset) * zoom, ((50 - (Y_RESOLUTION / 2)) + y_offset) * zoom};
-    Point p2 = {((150 - (X_RESOLUTION / 2)) + x_offset) * zoom, ((483 - (Y_RESOLUTION / 2)) + y_offset) * zoom};
-    Point p3 = {((650 - (X_RESOLUTION / 2)) + x_offset) * zoom, ((483 - (Y_RESOLUTION / 2)) + y_offset) * zoom};
+    Point p1 = {(400 - x_offset) / zoom + (X_RESOLUTION / 2), (50 - y_offset) / zoom + (Y_RESOLUTION / 2)};
+    Point p2 = {(150 - x_offset) / zoom + (X_RESOLUTION / 2), (483 - y_offset) / zoom + (Y_RESOLUTION / 2)};
+    Point p3 = {(650 - x_offset) / zoom + (X_RESOLUTION / 2), (483 - y_offset) / zoom + (Y_RESOLUTION / 2)};
 
     // Draw the 3 sides of the triangle
     DrawKochCurve(p2, p1, RENDER_DEPTH);
@@ -481,44 +444,6 @@ void DrawKochSnowflake() {
     SDL_RenderPresent(renderer);
 }
 
-// Inputs are inversed because I can't be bothered to fix them in the snowflake code
-void KochSnowflakeInput(SDL_Event *event) {
-    // Zoom in
-    if (event->key.scancode == SDL_SCANCODE_EQUALS || event->key.scancode == SDL_SCANCODE_KP_PLUS) {
-        zoom += 0.01f;
-    }
-    // Zoom out
-    else if (event->key.scancode == SDL_SCANCODE_MINUS || event->key.scancode == SDL_SCANCODE_KP_MINUS) {
-        zoom -= 0.01f;
-        if (zoom <= 0) {
-            zoom = 0.01f;
-        }
-    }
-    // Shift up
-    else if (event->key.scancode == SDL_SCANCODE_UP) {
-        int y = 10 * zoom;
-        if (y <= 0) {y = 1;}
-        y_offset += y;
-    }
-    // Shift down
-    else if (event->key.scancode == SDL_SCANCODE_DOWN) {
-        int y = 10 * zoom;
-        if (y <= 0) {y = 1;}
-        y_offset -= y;
-    }
-    // Shift left
-    else if (event->key.scancode == SDL_SCANCODE_LEFT) {
-        int x = 10 * zoom;
-        if (x <= 0) {x = 1;}
-        x_offset += x;
-    }
-    // Shift right
-    else if (event->key.scancode == SDL_SCANCODE_RIGHT) {
-        int x = 10 * zoom;
-        if (x <= 0) {x = 1;}
-        x_offset -= x;
-    }
-}
 SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
 {
     // Just make absolutely sure that the menu is loaded first
@@ -547,9 +472,9 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event)
         // If in the menu, listen for number keys to change the screen or quit
         switch (current_screen) {
             case MENU: return MenuInput(event); break;
-            case MANDELBROT_SET: MandelbrotInput(event); break;
-            case SIERPINSKI_TRIANGLE: SierpinskiInput(event); break;
-            case KOCH_SNOWFLAKE: KochSnowflakeInput(event); break;
+            case MANDELBROT_SET: FractalInput(event); break;
+            case SIERPINSKI_TRIANGLE: FractalInput(event); break;
+            case KOCH_SNOWFLAKE: FractalInput(event); break;
         };
     }
 
