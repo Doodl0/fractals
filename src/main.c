@@ -15,6 +15,7 @@
 // Constant resolution for now
 #define X_RESOLUTION 800
 #define Y_RESOLUTION 600
+#define MAX_ITERATIONS 255
 
 static SDL_Window *window = NULL;
 static SDL_Renderer *renderer = NULL;
@@ -40,10 +41,10 @@ typedef struct {
 float zoom = 1.0f;
 float input_zoom(const SDL_Event *event, float zoom) {
     if (event->key.scancode == SDL_SCANCODE_UP) {
-        zoom -= 0.1f;
+        zoom -= 0.01f;
     }
     else if (event->key.scancode == SDL_SCANCODE_DOWN) {
-        zoom += 0.1f;
+        zoom += 0.01f;
     }
     return zoom;
 }
@@ -51,15 +52,14 @@ float input_zoom(const SDL_Event *event, float zoom) {
 // Mandelbrot function shamelessly copied from wikipedia
 int Mandelbrot(int Px, int Py) {
     // Scaled x coordinate of pixel (scaled to lie in the Mandelbrot X scale (-2.00, 0.47))
-    float x0 = (((float)Px / (float)X_RESOLUTION) * 2.47f - 2.0f) * zoom;
+    float x0 = ((((float)Px) / (float)X_RESOLUTION) * 2.47f - 2.0f) * zoom;
     // Scaled y coordinare of pixel (scaled to lie in the Mandelbrot Y scale (-1.12, 1.12))
     float y0 = ((float)Py / ((float)Y_RESOLUTION) * 2.24f - 1.0f) * zoom;
 
     float x, y = 0;
     int iteration = 0;
-    int max_iteration = 500;
 
-    while (x*x + y*y <= ( 1 << 16) && iteration < max_iteration) {
+    while (x*x + y*y <= ( 1 << 16) && iteration < MAX_ITERATIONS) {
         float xtemp = x*x - y*y + x0;
         y = 2*x*y + y0;
         x = xtemp;
@@ -106,10 +106,16 @@ SDL_AppResult SDL_AppIterate(void *appstate)
         for (int x = 0; x < X_RESOLUTION; x++) {
             for (int y = 0; y < Y_RESOLUTION; y++) {
                 int iteration = Mandelbrot(x, y);
-                //iteration_counts[x][y] = iteration;
-                //num_iteration_per_pixel[iteration]++;
-
-                SDL_WriteSurfacePixel(surface, x, y, 0, 0, iteration / 2, 255);
+                if (iteration >= MAX_ITERATIONS) {
+                    SDL_WriteSurfacePixel(surface, x, y, 0, 0, 0, 255);
+                }
+                else {
+                    float t = (float)iteration / MAX_ITERATIONS;
+                    Uint8 r = (Uint8)(9 * (1 - t) * t * t * t * 255);
+                    Uint8 g = (Uint8)(15 * (1 - t) * (1 - t) * t * t * 255);
+                    Uint8 b = (Uint8)(8.5 * (1 - t) * (1 - t) * (1 - t) * t * 255);
+                    SDL_WriteSurfacePixel(surface, x, y, r, g, b, 255);
+                }
             }
         }
 
