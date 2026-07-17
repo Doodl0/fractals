@@ -1,9 +1,11 @@
 #include "SDL3/SDL_events.h"
 #include "SDL3/SDL_init.h"
 #include "SDL3/SDL_pixels.h"
+#include "SDL3/SDL_rect.h"
 #include "SDL3/SDL_render.h"
 #include "SDL3/SDL_scancode.h"
 #include "SDL3/SDL_surface.h"
+#include "SDL3/SDL_thread.h"
 #include <stddef.h>
 #include <math.h>
 #define SDL_MAIN_USE_CALLBACKS 1  /* use the callbacks instead of main() */
@@ -26,18 +28,33 @@
 // Max iterations for Mandelbrot set - 255 is an easy number for pixel calculations
 #define MAX_ITERATIONS 255
 #define RENDER_DEPTH 7
-#define THREADS
+#define THREADS 8
+#define USE_THREADS true
 
 static SDL_Window *window = NULL;
 static SDL_Renderer *renderer = NULL;
 static SDL_Surface *surface = NULL;
+SDL_Surface *thread_surfaces[THREADS] = {};
 
+// Enum for current program state - which screen is currently displayed
 typedef enum DisplayScreen {
     MENU,
     MANDELBROT_SET,
     SIERPINSKI_TRIANGLE,
     KOCH_SNOWFLAKE,
 } DisplayScreen;
+
+// Thread data struct for multithreading rendering
+typedef struct ThreadData {
+    int x_resolution;
+    int y_resolution;
+    int start_x;
+    int start_y;
+    int x_offset;
+    int y_offset;
+    float zoom;
+    SDL_Surface *surface;
+} ThreadData;
 
 // Point struct for line drawing because IDK how to use SDL_Point
 typedef struct Point {
@@ -165,6 +182,12 @@ void DrawMandelbrot() {
 
         // Create texture from surface and render it
         SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
+        const SDL_FRect rect = (SDL_FRect) {
+            0.0f,
+            0.0f + 0 * (1.0f / (float)THREADS),
+            1.0f,
+            1.0f / (float)THREADS
+        };
         SDL_RenderTexture(renderer, texture, NULL, NULL);
         SDL_RenderPresent(renderer);
 
@@ -185,17 +208,118 @@ void DrawMandelbrot() {
 
 }
 
-void DrawMandelbrotThreaded() {
-    // Each thread has it's own surface to write to, which will then be used to draw the final image
-    SDL_Surface *surfaces[THREADS] = {};
-    SDL_Thread *threads[THREADS] = {};
-
-    // Thread surface resolution - each thread will render a horizontal slice, so x resolution will be the same
-    int thread_x_resolution = 0;
-
-    for (int i = 0; i < 8; i++) {
-        //surfaces[i] = SDL_CreateSurface()
+int MandelbrotThreaded(void *data) {
+    ThreadData* thread_data = (ThreadData* )data;
+    if (thread_data == NULL) {
+        return -1;
     }
+    SDL_LockSurface(thread_data->surface);
+
+    // Loop over every pixel like a fragment shader
+    for (int Px = thread_data->start_x; Px < thread_data->x_resolution + thread_data->start_x; Px++) {
+        for (int Py = thread_data->start_y; Py < thread_data->y_resolution + thread_data->start_y; Py++) {
+            // Caculate the Mandelbrot iteration of the current pixel
+
+            // Scaled x coordinate of pixel (scaled to lie in the Mandelbrot X scale (-2.00, 0.47))
+            float x0 = ((((float)(Px - (X_RESOLUTION / 2)) * thread_data->zoom + thread_data->x_offset  ) / (float)X_RESOLUTION) * 2.47f - 2.0f) ;
+            // Scaled y coordinare of pixel (scaled to lie in the Mandelbrot Y scale (-1.12, 1.12))
+            float y0 = (((float)(Py - (Y_RESOLUTION / 2)) * thread_data->zoom + thread_data->y_offset ) / ((float)Y_RESOLUTION) * 2.24f - 1.0f) ;
+
+            // Initialise x, y and iteration values as 0
+            float x = 0, y = 0;
+            int iteration = 0;
+
+            // Optimized time escape algorithm
+            float x2 = 0, y2 = 0;
+            while (x2 + y2 <= 4 && iteration < MAX_ITERATIONS) {
+                x2 = x * x;
+                y2 = y * y;
+                y = 2 * x * y + y0;
+                x = x2 - y2 + x0;
+                iteration += 1;
+            }
+
+            // If pixel escapes, just write black to the surface
+            if (iteration >= MAX_ITERATIONS) {
+                SDL_WriteSurfacePixel(thread_data->surface, Px - thread_data->start_x, Py - thread_data->start_y, 0, 0, 0, 255);
+            }
+            else {
+                // Assign colours and write to the surface
+                float t = (float)iteration / MAX_ITERATIONS;
+                Uint8 r = (Uint8)(9 * (1 - t) * t * t * t * 255);
+                Uint8 g = (Uint8)(15 * (1 - t) * (1 - t) * t * t * 255);
+                Uint8 b = (Uint8)(8.5 * (1 - t) * (1 - t) * (1 - t) * t * 255);
+                SDL_WriteSurfacePixel(thread_data->surface, Px - thread_data->start_x, Py - thread_data->start_y, r, g, b, 255);
+            }
+        }
+    }
+
+    return 0;
+}
+
+void DrawMandelbrotThreaded() {
+    // Reset render scale in case it carries over from previous screen
+    SDL_SetRenderScale(renderer, 1, 1);
+    // Clear screen with black just in case
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderClear(renderer);
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+
+    // Only render new frame if zoom or offset changes - saves a lot of performance kinda because my code is slow and single threaded
+    if (zoom != last_zoom || x_offset != x_last_offset || y_offset != y_last_offset) {
+        // Each thread has it's own surface to write to, which will then be used to draw the final image
+        SDL_Thread *threads[THREADS] = {};
+        ThreadData thread_data[THREADS] = {};
+
+        // Thread surface resolution - each thread will render a horizontal slice, so x resolution will be the same
+        int thread_y_resolution = (Y_RESOLUTION / THREADS);
+
+        for (int i = 0; i < THREADS; i++) {
+            thread_surfaces[i] = SDL_CreateSurface(X_RESOLUTION, thread_y_resolution, SDL_PIXELFORMAT_RGBA8888);
+            SDL_LockSurface(thread_surfaces[i]);
+            thread_data[i] = (ThreadData) {
+                X_RESOLUTION,
+                thread_y_resolution,
+                0,
+                i * thread_y_resolution,
+                x_offset,
+                y_offset,
+                zoom,
+                thread_surfaces[i]
+            };
+
+            char thread_name[32] = "Thread";
+            sprintf(thread_name, "Thread %i", i);
+
+            threads[i] = SDL_CreateThread(MandelbrotThreaded, thread_name, &thread_data[i]);
+        }
+
+        for (int i = 0; i < THREADS; i++) {
+            int return_value;
+            SDL_WaitThread(threads[i], &return_value);
+            SDL_Log("Thread returned value: %d", return_value);
+        }
+
+        // Set last zoom and offset to current so that the program knows nothing has changed between this frame and the next
+        last_zoom = zoom;
+        x_last_offset = x_offset;
+        y_last_offset = y_offset;
+    }
+
+    // Create texture from surface and render it
+    for (int i = 0; i < THREADS; i++) {
+        SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, thread_surfaces[i]);
+        const SDL_FRect rect = (SDL_FRect) {
+            0.0f,
+            0.0f + i * (Y_RESOLUTION / (float)THREADS),
+            X_RESOLUTION,
+            Y_RESOLUTION / (float)THREADS
+        };
+        SDL_RenderTexture(renderer, texture, NULL, &rect);
+        SDL_DestroyTexture(texture);
+    }
+
+    SDL_RenderPresent(renderer);
 }
 
 // Handle input while Mandelbrot is the active screen
@@ -404,7 +528,14 @@ SDL_AppResult SDL_AppIterate(void *appstate)
     // Switch through to get current screen and draw the relavent screen
     switch (current_screen) {
         case MENU: DrawMenu(); break;
-        case MANDELBROT_SET: DrawMandelbrot(); break;
+        case MANDELBROT_SET:
+            if (USE_THREADS) {
+                DrawMandelbrotThreaded();
+            }
+            else {
+                DrawMandelbrot();
+            }
+            break;
         case SIERPINSKI_TRIANGLE: DrawSierpinksi(); break;
         case KOCH_SNOWFLAKE: DrawKochSnowflake(); break;
     }
