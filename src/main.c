@@ -18,6 +18,7 @@
 
 // Max iterations for Mandelbrot set - 255 is an easy number for pixel calculations
 #define MAX_ITERATIONS 255
+#define RENDER_DEPTH 7
 
 static SDL_Window *window = NULL;
 static SDL_Renderer *renderer = NULL;
@@ -43,8 +44,8 @@ DisplayScreen current_screen = 0;
 // Last positions and zooms are to be used for stopping rendering when nothing changes between frames
 float zoom = 1.0f;
 float last_zoom = 0.0f;
-int x_offset = 400;
-int y_offset = 300;
+int x_offset = X_RESOLUTION / 2;
+int y_offset = Y_RESOLUTION / 2;
 int x_last_offset, y_last_offset = 0;
 
 // Draw a simple selection menu with debug text to allow the user to select a fractal
@@ -120,19 +121,14 @@ int Mandelbrot(int Px, int Py) {
 
 // Draw Mandelbrot to the screen
 void DrawMandelbrot() {
+    // Reset render scale in case it carries over from previous screen
+    SDL_SetRenderScale(renderer, 1, 1);
     // Clear screen with black just in case
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
-    // Reset render scale in case it carries over from previous screen
-    SDL_SetRenderScale(renderer, 1, 1);
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     // Only render new frame if zoom or offset changes - saves a lot of performance kinda because my code is slow and single threaded
     if (zoom != last_zoom || x_offset != x_last_offset || y_offset != y_last_offset) {
-
-        // Set last zoom and offset to current so that the program knows nothing has changed between this frame and the next
-        last_zoom = zoom;
-        x_last_offset = x_offset;
-        y_last_offset = y_offset;
-
         // Lock surface to allow writing to the pixels
         SDL_LockSurface(surface);
         // Loop over every pixel like a fragment shader
@@ -153,6 +149,10 @@ void DrawMandelbrot() {
                     SDL_WriteSurfacePixel(surface, x, y, r, g, b, 255);
                 }
             }
+            // Set last zoom and offset to current so that the program knows nothing has changed between this frame and the next
+            last_zoom = zoom;
+            x_last_offset = x_offset;
+            y_last_offset = y_offset;
         }
 
         // Create texture from surface and render it
@@ -181,11 +181,11 @@ void DrawMandelbrot() {
 void MandelbrotInput(SDL_Event *event) {
     // Zoom in
     if (event->key.scancode == SDL_SCANCODE_EQUALS || event->key.scancode == SDL_SCANCODE_KP_PLUS) {
-        zoom -= 0.025f;
+        zoom -= 0.01f;
     }
     // Zoom out
     else if (event->key.scancode == SDL_SCANCODE_MINUS || event->key.scancode == SDL_SCANCODE_KP_MINUS) {
-        zoom += 0.025f;
+        zoom += 0.01f;
     }
     // Shift up
     else if (event->key.scancode == SDL_SCANCODE_UP) {
@@ -205,13 +205,66 @@ void MandelbrotInput(SDL_Event *event) {
     }
 }
 
-// Placeholder
-void DrawSierpinksi() {
-    //SDL_RenderLine(renderer);
+void DrawTriangle(Point p1, Point p2, Point p3) {
+    SDL_RenderLine(renderer, p1.x, p1.y, p2.x, p2.y);
+    SDL_RenderLine(renderer, p2.x, p2.y, p3.x, p3.y);
+    SDL_RenderLine(renderer, p3.x, p3.y, p1.x, p1.y);
 }
 
-void SierpinskiInput() {
+void DrawIterativeTriangles(Point p1, Point p2, Point p3, int depth) {
+    DrawTriangle(p1, p2, p3);
+    if (depth <= 0) {return;}
 
+    Point p4 = {(p2.x + p3.x) / 2, (p2.y + p3.y) / 2};
+    Point p5 = {(p3.x + p1.x) / 2, (p3.y + p1.y) / 2};
+    Point p6 = {(p1.x + p2.x) / 2, (p1.y + p2.y) / 2};
+
+    DrawIterativeTriangles(p1, p5, p6, depth - 1);
+    DrawIterativeTriangles(p4, p2, p6, depth - 1);
+    DrawIterativeTriangles(p4, p5, p3, depth - 1);
+}
+
+void DrawSierpinksi() {
+    SDL_SetRenderScale(renderer, 1, 1);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderClear(renderer);
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    // Initial vertices for a large centered triangle
+    Point p1 = {(400 - (X_RESOLUTION / 2)) * zoom + x_offset, (50 - (Y_RESOLUTION / 2)) * zoom + y_offset};
+    Point p2 = {(150 - (X_RESOLUTION / 2)) * zoom + x_offset, (483 - (Y_RESOLUTION / 2)) * zoom + y_offset};
+    Point p3 = {(650 - (X_RESOLUTION / 2)) * zoom + x_offset, (483 - (Y_RESOLUTION / 2)) * zoom + y_offset};
+
+    DrawIterativeTriangles(p1,p2,p3, RENDER_DEPTH);
+
+    SDL_RenderPresent(renderer);
+}
+
+// Inversed again because cannot be bothered to fix triangle code
+void SierpinskiInput(SDL_Event *event) {
+    // Zoom in
+    if (event->key.scancode == SDL_SCANCODE_EQUALS || event->key.scancode == SDL_SCANCODE_KP_PLUS) {
+        zoom += 0.01f;
+    }
+    // Zoom out
+    else if (event->key.scancode == SDL_SCANCODE_MINUS || event->key.scancode == SDL_SCANCODE_KP_MINUS) {
+        zoom -= 0.01f;
+    }
+    // Shift up
+    else if (event->key.scancode == SDL_SCANCODE_UP) {
+        y_offset += 10;
+    }
+    // Shift down
+    else if (event->key.scancode == SDL_SCANCODE_DOWN) {
+        y_offset -= 10;
+    }
+    // Shift left
+    else if (event->key.scancode == SDL_SCANCODE_LEFT) {
+        x_offset += 10;
+    }
+    // Shift right
+    else if (event->key.scancode == SDL_SCANCODE_RIGHT) {
+        x_offset -= 10;
+    }
 }
 
 // Draw a single Koch Curve
@@ -253,9 +306,9 @@ void DrawKochSnowflake() {
     Point p3 = {(650 - (X_RESOLUTION / 2)) * zoom + x_offset, (483 - (Y_RESOLUTION / 2)) * zoom + y_offset};
 
     // Draw the 3 sides of the triangle
-    DrawKochCurve(p2, p1, 6);
-    DrawKochCurve(p3, p2, 6);
-    DrawKochCurve(p1, p3, 6);
+    DrawKochCurve(p2, p1, RENDER_DEPTH);
+    DrawKochCurve(p3, p2, RENDER_DEPTH);
+    DrawKochCurve(p1, p3, RENDER_DEPTH);
 
     SDL_RenderPresent(renderer);
 }
@@ -264,11 +317,11 @@ void DrawKochSnowflake() {
 void KochSnowflakeInput(SDL_Event *event) {
     // Zoom in
     if (event->key.scancode == SDL_SCANCODE_EQUALS || event->key.scancode == SDL_SCANCODE_KP_PLUS) {
-        zoom += 0.025f;
+        zoom += 0.01f;
     }
     // Zoom out
     else if (event->key.scancode == SDL_SCANCODE_MINUS || event->key.scancode == SDL_SCANCODE_KP_MINUS) {
-        zoom -= 0.025f;
+        zoom -= 0.01f;
     }
     // Shift up
     else if (event->key.scancode == SDL_SCANCODE_UP) {
@@ -316,6 +369,7 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event)
         switch (current_screen) {
             case MENU: return MenuInput(event); break;
             case MANDELBROT_SET: MandelbrotInput(event); break;
+            case SIERPINSKI_TRIANGLE: SierpinskiInput(event); break;
             case KOCH_SNOWFLAKE: KochSnowflakeInput(event); break;
         };
     }
