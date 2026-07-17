@@ -94,7 +94,10 @@ void DrawMenu() {
     SDL_RenderDebugText(renderer, 16, 70, "1. Mandelbrot Set");
     SDL_RenderDebugText(renderer, 16, 90, "2. Sierpinski Triangle");
     SDL_RenderDebugText(renderer, 16, 110, "3. Koch Snowflake");
-    SDL_RenderDebugText(renderer, 16, 130, "4. Quit");
+    //SDL_RenderDebugText(renderer, 16, 130, "4. Quit");
+
+    // Quit hint text
+    SDL_RenderDebugText(renderer, 16, 170, "Press Esc in anywhere to quit");
 
     // Render
     SDL_RenderPresent(renderer);
@@ -383,7 +386,7 @@ void DrawIterativeTriangles(Point p1, Point p2, Point p3, int depth) {
     DrawIterativeTriangles(p4, p5, p3, depth - 1);
 }
 
-void DrawSierpinksi() {
+void DrawSierpinski() {
     SDL_SetRenderScale(renderer, 1, 1);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
@@ -463,7 +466,7 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
 SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event)
 {
     // If the application is called to quit, such as the close button, repott a success and close
-    if (event->type == SDL_EVENT_QUIT) {
+    if (event->type == SDL_EVENT_QUIT || (event->key.scancode == SDL_SCANCODE_ESCAPE)) {
         return SDL_APP_SUCCESS;
     }
 
@@ -495,7 +498,7 @@ SDL_AppResult SDL_AppIterate(void *appstate)
                 DrawMandelbrot();
             }
             break;
-        case SIERPINSKI_TRIANGLE: DrawSierpinksi(); break;
+        case SIERPINSKI_TRIANGLE: DrawSierpinski(); break;
         case KOCH_SNOWFLAKE: DrawKochSnowflake(); break;
     }
 

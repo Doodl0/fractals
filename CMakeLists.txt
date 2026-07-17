@@ -16,7 +16,7 @@ set(SOURCE_FILES
 # Create executable target as usual
 add_executable(fractals ${SOURCE_FILES})
 target_link_libraries(fractals PRIVATE SDL3::SDL3)
-# libm linking for linux
+# libm linking for Linux
 IF (UNIX)
   target_link_libraries(fractals PUBLIC m)
 ENDIF()
