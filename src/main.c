@@ -43,6 +43,7 @@ typedef enum DisplayScreen {
     MANDELBROT_SET,
     SIERPINSKI_TRIANGLE,
     KOCH_SNOWFLAKE,
+    JULIA_SET
 } DisplayScreen;
 
 // Thread data struct for multithreading rendering
@@ -94,7 +95,7 @@ void DrawMenu() {
     SDL_RenderDebugText(renderer, 16, 70, "1. Mandelbrot Set");
     SDL_RenderDebugText(renderer, 16, 90, "2. Sierpinski Triangle");
     SDL_RenderDebugText(renderer, 16, 110, "3. Koch Snowflake");
-    //SDL_RenderDebugText(renderer, 16, 130, "4. Quit");
+    SDL_RenderDebugText(renderer, 16, 130, "4. Julia Set");
 
     // Quit hint text
     SDL_RenderDebugText(renderer, 16, 170, "Press Esc in anywhere to quit");
@@ -117,11 +118,50 @@ SDL_AppResult MenuInput(SDL_Event *event) {
     else if (event->key.scancode == SDL_SCANCODE_3) {
         current_screen = KOCH_SNOWFLAKE;
     }
-    // 4 Key -> return a success result so that the app shuts down
+    // 4 Key -> Julia
     else if (event->key.scancode == SDL_SCANCODE_4) {
-        return SDL_APP_SUCCESS;
+        current_screen = JULIA_SET;
     }
     return SDL_APP_CONTINUE;
+}
+
+// Handle input while Mandelbrot is the active screen
+void FractalInput(SDL_Event *event) {
+    // Zoom in
+    if (event->key.scancode == SDL_SCANCODE_EQUALS || event->key.scancode == SDL_SCANCODE_KP_PLUS) {
+        zoom -= 0.01f;
+        if (zoom <= 0) {
+            zoom = 0.01f;
+        }
+    }
+    // Zoom out
+    else if (event->key.scancode == SDL_SCANCODE_MINUS || event->key.scancode == SDL_SCANCODE_KP_MINUS) {
+        zoom += 0.01f;
+    }
+    // Shift up
+    else if (event->key.scancode == SDL_SCANCODE_UP) {
+        int y = 10 * zoom;
+        if (y <= 0) {y = 1;}
+        y_offset -= y;
+    }
+    // Shift down
+    else if (event->key.scancode == SDL_SCANCODE_DOWN) {
+        int y = 10 * zoom;
+        if (y <= 0) {y = 1;}
+        y_offset += y;
+    }
+    // Shift left
+    else if (event->key.scancode == SDL_SCANCODE_LEFT) {
+        int x = 10 * zoom;
+        if (x <= 0) {x = 1;}
+        x_offset -= x;
+    }
+    // Shift right
+    else if (event->key.scancode == SDL_SCANCODE_RIGHT) {
+        int x = 10 * zoom;
+        if (x <= 0) {x = 1;}
+        x_offset += x;
+    }
 }
 
 // Mandelbrot function shamelessly copied from wikipedia
@@ -328,43 +368,118 @@ void DrawMandelbrotThreaded() {
     SDL_RenderPresent(renderer);
 }
 
-// Handle input while Mandelbrot is the active screen
-void FractalInput(SDL_Event *event) {
-    // Zoom in
-    if (event->key.scancode == SDL_SCANCODE_EQUALS || event->key.scancode == SDL_SCANCODE_KP_PLUS) {
-        zoom -= 0.01f;
-        if (zoom <= 0) {
-            zoom = 0.01f;
+int JuliaThreaded(void* data) {
+    ThreadData* thread_data = (ThreadData* )data;
+    if (thread_data == NULL) {
+        return -1;
+    }
+    SDL_LockSurface(thread_data->surface);
+
+    double R = 5.0f;
+    double cx = -0.348827f, cy = 0.607167f;
+
+    // Loop over every pixel like a fragment shader
+    for (int Px = thread_data->start_x; Px < thread_data->x_resolution + thread_data->start_x; Px++) {
+        for (int Py = thread_data->start_y; Py < thread_data->y_resolution + thread_data->start_y; Py++) {
+            // Scaled x coordinate of pixel (scaled to between R and -R)
+            float zx = ((((float)(Px - (X_RESOLUTION / 2)) * thread_data->zoom + thread_data->x_offset  ) / (float)X_RESOLUTION) * 2 * R - R);
+            // Scaled y coordinare of pixel (scaled to between R and -R)
+            float zy = (((float)(Py - (Y_RESOLUTION / 2)) * thread_data->zoom + thread_data->y_offset ) / ((float)Y_RESOLUTION) * 2 * R - R);
+
+            int iteration = 0;
+
+            while(zx * zx + zy * zy < R * R && iteration < MAX_ITERATIONS) {
+                float xtemp = zx * zx - zy * zy;
+                zy = 2 * zx * zy + cy;
+                zx = xtemp + cx;
+                iteration += 1;
+            }
+
+            if (iteration >= MAX_ITERATIONS) {
+                SDL_WriteSurfacePixel(thread_data->surface, Px - thread_data->start_x, Py - thread_data->start_y, 0, 0, 0, 255);
+            }
+            else {
+
+                float abs_z = zx * zx + zy * zy;
+                iteration = iteration + 1 - log(log(abs_z))/log(MAX_ITERATIONS);
+                // Assign colours and write to the surface
+                float t = (float)iteration / MAX_ITERATIONS;
+                Uint8 r = (Uint8)(9 * (1 - t) * t * t * t * 255);
+                Uint8 g = (Uint8)(15 * (1 - t) * (1 - t) * t * t * 255);
+                Uint8 b = (Uint8)(8.5 * (1 - t) * (1 - t) * (1 - t) * t * 255);
+                SDL_WriteSurfacePixel(thread_data->surface, Px - thread_data->start_x, Py - thread_data->start_y, iteration, g, b, 255);
+
+            }
         }
     }
-    // Zoom out
-    else if (event->key.scancode == SDL_SCANCODE_MINUS || event->key.scancode == SDL_SCANCODE_KP_MINUS) {
-        zoom += 0.01f;
+    return 0;
+}
+
+void DrawJuliaThreaded() {
+    // Reset render scale in case it carries over from previous screen
+    SDL_SetRenderScale(renderer, 1, 1);
+    // Clear screen with black just in case
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderClear(renderer);
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+
+    // Only render new frame if zoom or offset changes - saves a lot of performance kinda because my code is slow and single threaded
+    if (zoom != last_zoom || x_offset != x_last_offset || y_offset != y_last_offset) {
+        // Each thread has it's own surface to write to, which will then be used to draw the final image
+        SDL_Thread *threads[THREADS] = {};
+        ThreadData thread_data[THREADS] = {};
+
+        // Thread surface resolution - each thread will render a horizontal slice, so x resolution will be the same
+        int thread_y_resolution = (Y_RESOLUTION / THREADS);
+
+        for (int i = 0; i < THREADS; i++) {
+            // Create surface, lock it and package it with thread data so it can be written to
+            thread_surfaces[i] = SDL_CreateSurface(X_RESOLUTION, thread_y_resolution, SDL_PIXELFORMAT_RGBA8888);
+            SDL_LockSurface(thread_surfaces[i]);
+            thread_data[i] = (ThreadData) {
+                X_RESOLUTION,
+                thread_y_resolution,
+                0,
+                i * thread_y_resolution,
+                x_offset,
+                y_offset,
+                zoom,
+                thread_surfaces[i]
+            };
+
+            // Create threads with thread data
+            char thread_name[32] = "Thread";
+            sprintf(thread_name, "Thread %i", i);
+
+            threads[i] = SDL_CreateThread(JuliaThreaded, thread_name, &thread_data[i]);
+        }
+
+        for (int i = 0; i < THREADS; i++) {
+            int return_value;
+            SDL_WaitThread(threads[i], &return_value);
+            //SDL_Log("Thread returned value: %d", return_value);
+        }
+
+        // Set last zoom and offset to current so that the program knows nothing has changed between this frame and the next
+        last_zoom = zoom;
+        x_last_offset = x_offset;
+        y_last_offset = y_offset;
     }
-    // Shift up
-    else if (event->key.scancode == SDL_SCANCODE_UP) {
-        int y = 10 * zoom;
-        if (y <= 0) {y = 1;}
-        y_offset -= y;
+
+    // Create texture from each surface and render it at the corresponding vertical offset
+    for (int i = 0; i < THREADS; i++) {
+        SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, thread_surfaces[i]);
+        const SDL_FRect rect = (SDL_FRect) {
+            0.0f,
+            0.0f + i * (Y_RESOLUTION / (float)THREADS),
+            X_RESOLUTION,
+            Y_RESOLUTION / (float)THREADS
+        };
+        SDL_RenderTexture(renderer, texture, NULL, &rect);
+        SDL_DestroyTexture(texture);
     }
-    // Shift down
-    else if (event->key.scancode == SDL_SCANCODE_DOWN) {
-        int y = 10 * zoom;
-        if (y <= 0) {y = 1;}
-        y_offset += y;
-    }
-    // Shift left
-    else if (event->key.scancode == SDL_SCANCODE_LEFT) {
-        int x = 10 * zoom;
-        if (x <= 0) {x = 1;}
-        x_offset -= x;
-    }
-    // Shift right
-    else if (event->key.scancode == SDL_SCANCODE_RIGHT) {
-        int x = 10 * zoom;
-        if (x <= 0) {x = 1;}
-        x_offset += x;
-    }
+
+    SDL_RenderPresent(renderer);
 }
 
 void DrawTriangle(Point p1, Point p2, Point p3) {
@@ -478,6 +593,7 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event)
             case MANDELBROT_SET: FractalInput(event); break;
             case SIERPINSKI_TRIANGLE: FractalInput(event); break;
             case KOCH_SNOWFLAKE: FractalInput(event); break;
+            case JULIA_SET: FractalInput(event); break;
         };
     }
 
@@ -500,6 +616,11 @@ SDL_AppResult SDL_AppIterate(void *appstate)
             break;
         case SIERPINSKI_TRIANGLE: DrawSierpinski(); break;
         case KOCH_SNOWFLAKE: DrawKochSnowflake(); break;
+        case JULIA_SET:
+            if (USE_THREADS) {
+                DrawJuliaThreaded();
+            }
+            break;
     }
 
     return SDL_APP_CONTINUE;
