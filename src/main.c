@@ -30,7 +30,7 @@
 #define MAX_ITERATIONS 255
 #define RENDER_DEPTH 7
 #define THREADS 8
-#define USE_THREADS true
+#define USE_THREADS false
 
 static SDL_Window *window = NULL;
 static SDL_Renderer *renderer = NULL;
@@ -130,9 +130,6 @@ void FractalInput(SDL_Event *event) {
     // Zoom in
     if (event->key.scancode == SDL_SCANCODE_EQUALS || event->key.scancode == SDL_SCANCODE_KP_PLUS) {
         zoom -= 0.01f;
-        if (zoom <= 0) {
-            zoom = 0.01f;
-        }
     }
     // Zoom out
     else if (event->key.scancode == SDL_SCANCODE_MINUS || event->key.scancode == SDL_SCANCODE_KP_MINUS) {
@@ -401,7 +398,7 @@ int JuliaThreaded(void* data) {
             else {
 
                 float abs_z = zx * zx + zy * zy;
-                iteration = iteration + 1 - log(log(abs_z))/log(MAX_ITERATIONS);
+                iteration = iteration + 1 - log(log(abs_z))/log(2);
                 // Assign colours and write to the surface
                 float t = (float)iteration / MAX_ITERATIONS;
                 Uint8 r = (Uint8)(9 * (1 - t) * t * t * t * 255);
@@ -480,6 +477,71 @@ void DrawJuliaThreaded() {
     }
 
     SDL_RenderPresent(renderer);
+}
+
+// Draw Julia single-threaded
+void DrawJulia() {
+    // Reset render scale in case it carries over from previous screen
+    SDL_SetRenderScale(renderer, 1, 1);
+    // Clear screen with black just in case
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderClear(renderer);
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+
+    double R = 5.0f;
+    double cx = -0.348827f, cy = 0.607167f;
+
+    // Only render new frame if zoom or offset changes - saves a lot of performance kinda because my code is slow and single threaded
+    if (zoom != last_zoom || x_offset != x_last_offset || y_offset != y_last_offset) {
+        // Lock surface to allow writing to the pixels
+        SDL_LockSurface(surface);
+        // Loop over every pixel like a fragment shader
+        for (int Px = 0; Px < X_RESOLUTION; Px++) {
+            for (int Py = 0; Py < Y_RESOLUTION; Py++) {
+                // Caculate the Mandelbrot iteration of the current pixel
+                // Scaled x coordinate of pixel (scaled to between R and -R)
+                float zx = ((((float)(Px - (X_RESOLUTION / 2)) * zoom + x_offset  ) / (float)X_RESOLUTION) * 2 * R - R);
+                // Scaled y coordinare of pixel (scaled to between R and -R)
+                float zy = (((float)(Py - (Y_RESOLUTION / 2)) * zoom + y_offset ) / ((float)Y_RESOLUTION) * 2 * R - R);
+
+                int iteration = 0;
+
+                while(zx * zx + zy * zy < R * R && iteration < MAX_ITERATIONS) {
+                    float xtemp = zx * zx - zy * zy;
+                    zy = 2 * zx * zy + cy;
+                    zx = xtemp + cx;
+                    iteration += 1;
+                }
+
+                if (iteration >= MAX_ITERATIONS) {
+                    SDL_WriteSurfacePixel(surface, Px, Py, 0, 0, 0, 255);
+                }
+                else {
+                    float abs_z = zx * zx + zy * zy;
+                    iteration = iteration + 1 - log(log(abs_z))/log(2);
+                    // Assign colours and write to the surface
+                    float t = (float)iteration / MAX_ITERATIONS;
+                    Uint8 r = (Uint8)(9 * (1 - t) * t * t * t * 255);
+                    Uint8 g = (Uint8)(15 * (1 - t) * (1 - t) * t * t * 255);
+                    Uint8 b = (Uint8)(8.5 * (1 - t) * (1 - t) * (1 - t) * t * 255);
+                    SDL_WriteSurfacePixel(surface, Px, Py, iteration, g, b, 255);
+                }
+            }
+            // Set last zoom and offset to current so that the program knows nothing has changed between this frame and the next
+            last_zoom = zoom;
+            x_last_offset = x_offset;
+            y_last_offset = y_offset;
+        }
+
+        // Create texture from surface and render it
+        SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
+        SDL_RenderTexture(renderer, texture, NULL, NULL);
+        SDL_RenderPresent(renderer);
+
+        // Destroy texture to free memory
+        SDL_UnlockSurface(surface);
+        SDL_DestroyTexture(texture);
+    }
 }
 
 void DrawTriangle(Point p1, Point p2, Point p3) {
@@ -619,6 +681,9 @@ SDL_AppResult SDL_AppIterate(void *appstate)
         case JULIA_SET:
             if (USE_THREADS) {
                 DrawJuliaThreaded();
+            }
+            else {
+                DrawJulia();
             }
             break;
     }
