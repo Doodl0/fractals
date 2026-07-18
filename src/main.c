@@ -30,7 +30,7 @@
 #define MAX_ITERATIONS 255
 #define RENDER_DEPTH 7
 #define THREADS 8
-#define USE_THREADS false
+#define USE_THREADS true
 
 static SDL_Window *window = NULL;
 static SDL_Renderer *renderer = NULL;

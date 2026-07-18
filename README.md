@@ -20,6 +20,14 @@ The Koch snowflake and Sierpinski triangle are rendered with lines directly with
 - Minus key - Zoom out
 - Plus / Equals key - Zoom in
 
+## Code options
+
+### You can set some important options by changing these define statements in the code
+- MAX_ITERATIONS - controls the maximum amount of iterations Mandelbrot / Julia run for. Increasing may give better quality but drastically impacts performance. Default = 255
+- RENDER_DEPTH - the amount of recursion loops the Sierpinski and Koch algorithms use. Increasing will make the fractal appear more truly infinite but will also drastically impact performance. Default = 7
+- THREADS - The amount of threads used to render Mandelbrot / Julia when using threads. Increasing could improve performance but it may become unstable. Default = 8
+- USE_THREADS - Boolean value - controls whether the program uses multiple threads for rendering Mandelbrot / Julia. Default = true
+
 ## Development
 - I did not use AI or an LLM while making this project.
 - A lot of the algorithms or methods were found from much smarter people online, and I reimplemented them. In particular, [the pseudocode examples for plotting a Mandelbrot set on wikipedia](https://en.wikipedia.org/wiki/Plotting_algorithms_for_the_Mandelbrot_set), and the [Julia set pseudocode section](https://en.wikipedia.org/wiki/Julia_set#Pseudocode) were very helpful.
